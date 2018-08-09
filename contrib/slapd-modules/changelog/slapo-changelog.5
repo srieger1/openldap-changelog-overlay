@@ -1,0 +1,130 @@
+.TH SLAPO-CHANGELOG 5 "RELEASEDATE" "OpenLDAP LDVERSION"
+.\" Copyright 2010 The OpenLDAP Foundation All Rights Reserved.
+.\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
+.SH NAME
+slapo-changelog \- Legacy Changelog Overlay
+.SH SYNOPSIS
+ETCDIR/slapd.conf
+.SH DESCRIPTION
+The Changelog overlay allows changes being commited to the DIT (
+.BR adds/deletes/modrdn
+) to be stored in an LDAP searchable database, like
+.BR slapd-bdb (5)
+.LP
+Generally speaking, logs are stored as entries, with the changelog
+number forming the RDN part of the entry. The
+.BR targetDN
+attribute dictates
+which entry was altered, and the
+.BR changes
+attribute contains an LDIF representation of the changes in
+.BR slapd-replog (5)
+format. Care should be taken to ensure that visibility into this database
+subtree is carefully restricted, since the ability to see the changes
+is equivalent to global DIT reading capability.
+.LP
+With a searchable changelog, one can perform persistent search on the
+changelog subtree to obtain notification as to when a particular entry has
+changed, or when particular attribute values have altered.
+.LP
+This module is based on the draft RFC designed by Gordon Good and Ludovic
+Poitou (last known draft was
+.B draft-good-ldap-changelog-04.txt
+)
+.SH CONFIGURATION
+These
+.B slapd.conf
+options apply to the Changelog overlay.
+They should appear after the
+.B overlay
+directive and after any subsequent
+.B database
+directive, which dictates the database backend storing the changes.
+.TP
+.B changelog_db <basedn>
+Configures the backend under which the changes will be stored (e.g.
+.B cn=Changelog
+attributes. The database needs to be a separate database backend.
+.TP
+.B changelog_convert_replace
+This flag, which is by default reset, replaces a
+.B mod_replace
+operation with two changelog entries - a
+.B delete
+of the old entry, and an
+.B add
+of the new, modified entry. This is primarily useful for the case
+where a log inspector wishes to know which attribute values have vanished
+from an entry (since a simple
+.B mod_replace
+will contain the new attribute values, but not necessarily the ones which
+were replaced). In such a case, the
+.B changelog_dump_entry_filter
+(see below) should be set to ensure that the old target entry is stored in the
+delete changelog entry.
+.TP
+.B changelog_retention_time <seconds>
+Specifies the time (in seconds) for how log changelog entries should be
+stored in the log. As entries are added to the changelog, the oldest entries
+are pruned from the database. If unset, this value defaults to
+1209600 seconds (2 weeks).
+.TP
+.B changelog_prune_time <seconds>
+Specifies how often the changelog database should be scanned and older entries
+pruned. For performance reasons, this scan is not performed with each
+change (which can mean that entries older than the retention time have a
+short existence - until the next scheduled prune). By default, this values
+is set to 300 seconds. The lower this value, the higher the impact on
+directory performance.
+.TP
+.B changelog_dump_entry_filter <LDAP URL>
+By default, the entries are not stored within the changelog entry. However,
+this can be overridden by using the
+.B changelog_dump_entry_filter
+option. By specifying an LDAP URL (of which only the filter portion is
+actually used - the scheme, host, port, base, etc. are all ignored). As each
+entry to the changelog is considered, the entry (prior to modification, if
+present) is run through each of the filters specified. If the filter is
+satisfied, then the entire entry is stored in LDIF format within the
+.B oldEntry
+attribute within the changelog entry.
+entry
+.SH EXAMPLE
+.LP
+ ...
+ 
+ modulepath      /usr/local/libexec/openldap
+ moduleload      changelog.la
+
+ ...
+
+ database        bdb
+ suffix          "cn=Changelog"
+ rootdn          "cn=Changelog"
+ rootpw          secret
+ directory       /usr/local/var/openldap/openldap-changelog
+
+ ...
+
+ database        bdb
+
+ overlay         changelog
+ changelog_db    "cn=Changelog"
+ changelog_convert_replace
+ changelog_retention_time    1209600
+ changelog_prune_time        300
+ changelog_dump_entry_filter ldap://localhost/cn=test(objectClass=inetOrgPerson)
+
+ suffix          "dc=my-domain,dc=com"
+ rootdn          "cn=Manager,dc=my-domain,dc=com"
+ rootpw          secret   
+ directory       /usr/local/var/openldap/openldap-data
+
+ ...
+
+.SH FILES
+.TP
+ETCDIR/slapd.conf
+default slapd configuration file
+.SH SEE ALSO
+.BR slapd.conf (5).

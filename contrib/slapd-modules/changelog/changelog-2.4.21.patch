@@ -1,0 +1,125 @@
+diff -Naur openldap-2.4.21/configure openldap-2.4.21-changelog/configure
+--- openldap-2.4.21/configure	2009-09-30 02:26:39.000000000 +0200
++++ openldap-2.4.21-changelog/configure	2010-04-16 19:25:13.403807140 +0200
+@@ -1588,6 +1588,7 @@
+ SLAPD Overlay Options:
+     --enable-overlays	  enable all available overlays no|yes|mod
+     --enable-accesslog	  In-Directory Access Logging overlay no|yes|mod [no]
++    --enable-changelog    Changelog implementation overlay no|yes|mod [no]
+     --enable-auditlog	  Audit Logging overlay no|yes|mod [no]
+     --enable-collect	  Collect overlay no|yes|mod [no]
+     --enable-constraint	  Attribute Constraint overlay no|yes|mod [no]
+@@ -3742,6 +3743,7 @@
+ # end --enable-sql
+ 
+ Overlays="accesslog \
++	changelog \
+ 	auditlog \
+ 	collect \
+ 	constraint \
+@@ -3813,6 +3815,30 @@
+ 
+ # end --enable-accesslog
+ 
++# OpenLDAP --enable-changelog
++
++	# Check whether --enable-changelog or --disable-changelog was given.
++if test "${enable_changelog+set}" = set; then
++  enableval="$enable_changelog"
++
++	ol_arg=invalid
++	for ol_val in no yes mod ; do
++		if test "$enableval" = "$ol_val" ; then
++			ol_arg="$ol_val"
++		fi
++	done
++	if test "$ol_arg" = "invalid" ; then
++		{ { echo "$as_me:$LINENO: error: bad value $enableval for --enable-changelog" >&5
++echo "$as_me: error: bad value $enableval for --enable-changelog" >&2;}
++   { (exit 1); exit 1; }; }
++	fi
++	ol_enable_changelog="$ol_arg"
++
++else
++  	ol_enable_changelog=${ol_enable_overlays:-no}
++fi;
++# end --enable-changelog
++
+ # OpenLDAP --enable-auditlog
+ 
+ 	# Check whether --enable-auditlog was given.
+@@ -38265,6 +38291,22 @@
+ 
+ fi
+ 
++if test "$ol_enable_changelog" != no ; then
++	BUILD_CHANGELOG=$ol_enable_changelog
++	if test "$ol_enable_changelog" = mod ; then
++		MFLAG=SLAPD_MOD_DYNAMIC
++		SLAPD_DYNAMIC_OVERLAYS="$SLAPD_DYNAMIC_OVERLAYS changelog.la"
++	else
++		MFLAG=SLAPD_MOD_STATIC
++		SLAPD_STATIC_OVERLAYS="$SLAPD_STATIC_OVERLAYS changelog.o"
++	fi
++
++cat >>confdefs.h <<_ACEOF
++#define SLAPD_OVER_CHANGELOG $MFLAG
++_ACEOF
++
++fi
++
+ if test "$ol_enable_auditlog" != no ; then
+ 	BUILD_AUDITLOG=$ol_enable_auditlog
+ 	if test "$ol_enable_auditlog" = mod ; then
+diff -Naur openldap-2.4.21/configure.in openldap-2.4.21-changelog/configure.in
+--- openldap-2.4.21/configure.in	2009-09-30 02:24:39.000000000 +0200
++++ openldap-2.4.21-changelog/configure.in	2010-04-16 19:25:13.435992756 +0200
+@@ -332,6 +332,7 @@
+ dnl ----------------------------------------------------------------
+ dnl SLAPD Overlay Options
+ Overlays="accesslog \
++	changelog \
+ 	auditlog \
+ 	collect \
+ 	constraint \
+@@ -359,6 +360,8 @@
+ 	--, [no yes mod])dnl
+ OL_ARG_ENABLE(accesslog,[    --enable-accesslog	  In-Directory Access Logging overlay],
+ 	no, [no yes mod], ol_enable_overlays)
++OL_ARG_ENABLE(changelog,[    --enable-changelog	  Changelog implementation overlay],
++	no, [no yes mod], ol_enable_overlays)
+ OL_ARG_ENABLE(auditlog,[    --enable-auditlog	  Audit Logging overlay],
+ 	no, [no yes mod], ol_enable_overlays)
+ OL_ARG_ENABLE(collect,[    --enable-collect	  Collect overlay],
+@@ -2773,6 +2776,18 @@
+ 	AC_DEFINE_UNQUOTED(SLAPD_OVER_ACCESSLOG,$MFLAG,[define for In-Directory Access Logging overlay])
+ fi
+ 
++if test "$ol_enable_changelog" != no ; then
++	BUILD_CHANGELOG=$ol_enable_changelog
++	if test "$ol_enable_changelog" = mod ; then
++		MFLAG=SLAPD_MOD_DYNAMIC
++		SLAPD_DYNAMIC_OVERLAYS="$SLAPD_DYNAMIC_OVERLAYS changelog.la"
++	else
++		MFLAG=SLAPD_MOD_STATIC
++		SLAPD_STATIC_OVERLAYS="$SLAPD_STATIC_OVERLAYS changelog.o"
++	fi
++	AC_DEFINE_UNQUOTED(SLAPD_OVER_CHANGELOG,$MFLAG,[define for Changelog implementation overlay])
++fi
++
+ if test "$ol_enable_auditlog" != no ; then
+ 	BUILD_AUDITLOG=$ol_enable_auditlog
+ 	if test "$ol_enable_auditlog" = mod ; then
+diff -Naur openldap-2.4.21/include/portable.hin openldap-2.4.21-changelog/include/portable.hin
+--- openldap-2.4.21/include/portable.hin	2009-08-13 02:11:16.000000000 +0200
++++ openldap-2.4.21-changelog/include/portable.hin	2010-04-16 19:25:13.473699472 +0200
+@@ -966,6 +966,9 @@
+ /* define for In-Directory Access Logging overlay */
+ #undef SLAPD_OVER_ACCESSLOG
+ 
++/* define for Changelog implementation overlay */
++#undef SLAPD_OVER_CHANGELOG
++
+ /* define for Audit Logging overlay */
+ #undef SLAPD_OVER_AUDITLOG
+ 

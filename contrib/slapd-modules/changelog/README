@@ -1,0 +1,127 @@
+Copyright 2010 Sebastian Rieger. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP
+Public License.
+
+A copy of this license is available in the file LICENSE in the
+top-level directory of the distribution or, alternatively, at
+<http://www.OpenLDAP.org/license.html>.
+
+
+ACKNOWLEDGEMENTS
+
+This work was initially developed by Neil Dunbar.
+Thanks to Paul Turgyan for patching some leftover memory leaks.
+
+
+DESCRIPTION
+
+This directory contains a slapd overlay, changelog, that implements
+a mechanism to store changes made to a backend as searchable entries
+in a separate LDAP database.
+
+Changes are logged as entries, with the change number forming the RDN,
+in the DIT (e.g. under cn=Changelog). Entries contain the attribute
+targetDN that contains the origin distinguished name of the changes.
+The attribute changes contains the changes commited to the referenced
+entry in an LDIF representation. For security reasons, access to the
+backend storing the changelog should be carefully limited to ensure
+privacy of sensitive changes by using ACLs.
+
+Searching the changelog one can determine changes made to the DIT,
+issue notifications or use the changelog entries to synchronize them
+with other directories or databases. Some identity management
+solutions use this legacy changelog based synchronization that was
+initially defined in the draft RFC designed by Gordon Good and Ludovic
+Poitou ( last known draft was draft-good-ldap-changelog-04.txt )
+
+
+INSTALLATION
+
+First make sure that OpenLDAP was built from the parental source
+directory. Make sure you enabled modules (configure --enable-modules).
+The Makefile provided for this module uses some dependencies of the
+initial OpenLDAP build. After compiling the OpenLDAP source and 
+installing it, simply run
+
+    make
+
+in this directory. If you want to install the module you can run
+
+    make install
+
+after checking and eventually changing the installation directory
+of OpenLDAP in the Makefile (the module will be placed in
+INSTALLPATH).
+
+Alternatively a patch (changelog-<openldap-version>.patch) is
+provided to integrate the changelog module as a regular overlay
+to slapd. The patch was build against the version referenced in
+the file name but with some luck it will succeed also with future
+versions. You can apply the patch in the root of the OpenLDAP
+source directory using
+
+    patch -p1 <./contrib/slapd-modules/changelog/changelog-*.patch
+
+After patching the source you need to copy the changelog.c from
+this directory to servers/slapd/overlays in the OpenLDAP source.
+Having this done you should be able to compile the changelog overlay
+e.g. by using the following on the OpenLDAP source
+
+    configure --enable-changelog
+    make depend
+    make
+    make install
+
+
+CONFIGURATION
+
+To use the module in OpenLDAP you have to modify your slapd.conf.
+If you chose to build it as a module rather than patching the
+source and compiling it as a static overlay you need to:
+
+    modulepath      /usr/local/libexec/openldap
+    moduleload      changelog.la
+
+next you need to configure a separate backend that stores the
+changes. You may want to use a different location or different
+parameters to increase performance when you have a lot of
+frequent changes being made to the DIT.
+
+    database        bdb
+    suffix          "cn=Changelog"
+    rootdn          "cn=Changelog"
+    rootpw          secret
+    directory       /usr/local/var/openldap/openldap-changelog
+
+to store the changes being made to your regular backend
+databse you need to reference the overlay in its configuration:
+
+    database        bdb
+
+    overlay         changelog
+    changelog_db    "cn=Changelog"
+    changelog_convert_replace
+    changelog_retention_time	1209600
+    changelog_prune_time	300
+    changelog_dump_entry_filter ldap://localhost/cn=test(objectClass=inetOrgPerson)
+
+    suffix          "dc=my-domain,dc=com"
+    rootdn          "cn=Manager,dc=my-domain,dc=com"
+    rootpw          secret   
+    directory       /usr/local/var/openldap/openldap-data
+
+The changelog_db parameter references the backend used to store
+the changes (as mentioned above). The changelog_db is the only
+mandatory parameter to use the changelog overlay.
+changelog_convert_replace can be used to split ldapmodify
+operations using replace into two separate add and delete
+operations. changelog_retention_time defines how long changes
+are kept in the changelog backend before being pruned in
+seconds. changelog_prune_time defines how often the backend
+is scaned for old entries by the changelog overlay (again in
+seconds). The changelog_dump_entry_filter can be used to
+store the entire old entry (as it was before the change) in
+the oldEntry attribute in the changelog. Only entries that
+fullfill the given filter statement will get dumped.

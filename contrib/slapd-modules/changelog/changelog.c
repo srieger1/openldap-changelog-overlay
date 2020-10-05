@@ -30,6 +30,20 @@
 #include "ldif.h"
 #include "ldap_rq.h"
 
+/* USE_GMTIME_R and USE_LOCALTIME_R defined in ldap_pvt.h */
+
+#ifdef LDAP_DEVEL
+        /* to be released with 2.5 */
+#if !defined( USE_GMTIME_R ) || !defined( USE_LOCALTIME_R )
+        /* we use the same mutex for gmtime(3) and localtime(3)
+ *          * because implementations may use the same buffer
+ *                   * for both functions */
+        static ldap_pvt_thread_mutex_t ldap_int_gmtime_mutex;
+#endif
+#else /* ! LDAP_DEVEL */
+        ldap_pvt_thread_mutex_t ldap_int_gmtime_mutex;
+#endif /* ! LDAP_DEVEL */
+
 static slap_overinst changelog;
 
 static slap_callback nullsc = { NULL, NULL, NULL, NULL };
@@ -472,7 +486,7 @@ changelog_delmod( Operation *op, SlapReply *rs )
     int rc, len;
     void *priv = op->o_private;
     struct berval csn = BER_BVNULL;
-    char csnbuf[ LDAP_LUTIL_CSNSTR_BUFSIZE ];
+    char csnbuf[ LDAP_PVT_CSNSTR_BUFSIZE ];
     id->message="_delmod";
 
     if (!id->backend)
@@ -538,7 +552,7 @@ changelog_response(
     changelog_data *id = on->on_bi.bi_private;
     Backend *cbe = NULL;
     changelog_entry *ce, *cp;
-    char csnbuf[ LDAP_LUTIL_CSNSTR_BUFSIZE ];
+    char csnbuf[ LDAP_PVT_CSNSTR_BUFSIZE ];
     struct berval csn = BER_BVNULL;
     time_t now;
     
@@ -1053,10 +1067,10 @@ add_changelog_entry( Operation *op, Backend *be )
     attr_merge_one( e, slap_schema.si_ad_modifiersName, &op->o_dn, &op->o_ndn );
 
     now = slap_get_time();
-    ldap_pvt_thread_mutex_lock( &gmtime_mutex );
+    ldap_pvt_thread_mutex_lock( &ldap_int_gmtime_mutex );
     ltm = gmtime( &now );
     lutil_gentime( timebuf, sizeof(timebuf), ltm );
-    ldap_pvt_thread_mutex_unlock( &gmtime_mutex );
+    ldap_pvt_thread_mutex_unlock( &ldap_int_gmtime_mutex );
     bv.bv_val = timebuf;
     bv.bv_len = strlen( timebuf );
     attr_merge_one( e, slap_schema.si_ad_createTimestamp, &bv, NULL );
@@ -1066,7 +1080,7 @@ add_changelog_entry( Operation *op, Backend *be )
     ch_free(bv.bv_val);
 
     struct berval maxcsn;
-    char cbuf[LDAP_LUTIL_CSNSTR_BUFSIZE];
+    char cbuf[LDAP_PVT_CSNSTR_BUFSIZE];
 
     cbuf[0] = '\0';
     maxcsn.bv_val = cbuf;
@@ -1278,10 +1292,10 @@ prune_changelog( void *ctx, void *arg )
     Debug(LDAP_DEBUG_ANY, "Pruning changelog %s\n", id->backend->be_suffix[0].bv_val, NULL, NULL );
 
     then = slap_get_time() - id->retain;
-    ldap_pvt_thread_mutex_lock( &gmtime_mutex );
+    ldap_pvt_thread_mutex_lock( &ldap_int_gmtime_mutex );
     tm = gmtime(&then);
     lutil_gentime( thenstr, sizeof(thenstr), tm );
-    ldap_pvt_thread_mutex_unlock( &gmtime_mutex );
+    ldap_pvt_thread_mutex_unlock( &ldap_int_gmtime_mutex );
 
     filt = ch_calloc( strlen( fmt ) + strlen(thenstr) + 1, sizeof(char) );
     sprintf(filt, fmt, thenstr );

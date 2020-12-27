@@ -1,4 +1,4 @@
-Copyright 2010 Sebastian Rieger. All rights reserved.
+Copyright 2020 Sebastian Rieger. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted only as authorized by the OpenLDAP
@@ -93,7 +93,7 @@ frequent changes being made to the DIT.
     suffix          "cn=Changelog"
     rootdn          "cn=Changelog"
     rootpw          secret
-    directory       /usr/local/var/openldap/openldap-changelog
+    directory       /usr/local/var/openldap-data-changelog
 
 to store the changes being made to your regular backend
 databse you need to reference the overlay in its configuration:
@@ -102,15 +102,15 @@ databse you need to reference the overlay in its configuration:
 
     overlay         changelog
     changelog_db    "cn=Changelog"
-    changelog_convert_replace
+    changelog_convert_replace   false
     changelog_retention_time	1209600
     changelog_prune_time	300
-    changelog_dump_entry_filter ldap://localhost/cn=test(objectClass=inetOrgPerson)
+    changelog_dump_entry_filter ldap:///???(objectClass=inetOrgPerson)
 
     suffix          "dc=my-domain,dc=com"
     rootdn          "cn=Manager,dc=my-domain,dc=com"
     rootpw          secret   
-    directory       /usr/local/var/openldap/openldap-data
+    directory       /usr/local/var/openldap-data
 
 The changelog_db parameter references the backend used to store
 the changes (as mentioned above). The changelog_db is the only

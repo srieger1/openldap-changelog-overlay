@@ -95,3 +95,7 @@ echo "* Deleting entries"
 ldapdelete -x -D $admindn -w $adminpwd cn=user2,ou=sub,o=test,$basedn
 ldapdelete -x -D $admindn -w $adminpwd ou=sub,o=test,$basedn
 ldapdelete -x -D $admindn -w $adminpwd o=test,$basedn
+
+echo "RESULT changelog"
+
+ldapsearch -x -D $admindn -w $adminpwd -b cn=changelog

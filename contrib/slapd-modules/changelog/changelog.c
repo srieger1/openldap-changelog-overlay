@@ -357,9 +357,11 @@ clog_cf_gen(ConfigArgs *c)
 		        if ( id->task ) {
 		                struct re_s *re = id->task;
 		                id->task = NULL;
+                                ldap_pvt_thread_mutex_lock( &slapd_rq.rq_mutex );
 		                if ( ldap_pvt_runqueue_isrunning( &slapd_rq, re ))
 		                        ldap_pvt_runqueue_stoptask( &slapd_rq, re );
                                 ldap_pvt_runqueue_remove( &slapd_rq, re );
+                                ldap_pvt_thread_mutex_unlock( &slapd_rq.rq_mutex );
                         }
 			id->prune = 0;
 			break;
@@ -396,6 +398,8 @@ clog_cf_gen(ConfigArgs *c)
 		switch( c->type ) {
 		case CLOG_DB:
 		        if ( CONFIG_ONLINE_ADD( c )) {
+                                Debug( LDAP_DEBUG_ANY, "Setting changelog backend %s: %s \"%s\"\n",
+                                    c->log, c->cr_msg, c->value_dn.bv_val );
 		                id->backend = select_backend( &c->value_ndn, 0 );
         			if ( !id->backend ) {
 	        			snprintf( c->cr_msg, sizeof( c->cr_msg  ), "<%s> no matching backend found for suffix",
@@ -404,6 +408,7 @@ clog_cf_gen(ConfigArgs *c)
 					        c->log, c->cr_msg, c->value_dn.bv_val );
         				rc = 1;
                                 }
+                                ch_free( c->value_ndn.bv_val );
 			}
 			else
 			{
@@ -420,15 +425,28 @@ clog_cf_gen(ConfigArgs *c)
 			break;
 		case CLOG_PRUNE:
 			id->prune = c->value_int;
+                        Debug(LDAP_DEBUG_ANY, "changelog: prune interval %i secs\n",
+                            id->prune, NULL, NULL );
                         if ( slapMode & SLAP_SERVER_MODE ) {
                             struct re_s *re = id->task;
-                            if ( re )
+                            if ( id->task )
                                 re->interval.tv_sec = id->prune;
                             else
+                            {
+                                if ( !BER_BVISEMPTY( &id->backend_suffix )) {
+                                    id->backend = select_backend( &id->backend_suffix, 0 );
+                                    ch_free( id->backend_suffix.bv_val );
+                                    BER_BVZERO( &id->backend_suffix );
+                                }
+                                Debug(LDAP_DEBUG_ANY, "changelog: inserting pruning into runqueue (%s)\n",
+                                    id->backend, NULL, NULL );
+                                ldap_pvt_thread_mutex_lock( &slapd_rq.rq_mutex );
                                 id->task = ldap_pvt_runqueue_insert( &slapd_rq, 
                                     id->prune, prune_changelog, id, "prune_changelog", 
                                     id->backend ? id->backend->be_suffix[0].bv_val : 
                                         c->be->be_suffix[0].bv_val );
+                                ldap_pvt_thread_mutex_unlock( &slapd_rq.rq_mutex );
+                            }
                         }
 
 			break;
@@ -1541,6 +1559,7 @@ changelog_db_init( BackendDB *be, ConfigReply *cr )
     id->si_ad_newRDN = NULL;
     id->si_ad_newSuperior = NULL;
     id->si_ad_deleteOldRDN = NULL;
+    id->task = NULL;
     
     if (slap_str2ad( "firstChangeNumber", &id->si_ad_firstChangeNumber, &txt) != LDAP_SUCCESS ) {
         Debug(LDAP_DEBUG_ANY, "cannot locate attribute \"firstChangeNumber\"\n", 0, 0, 0);
@@ -1738,6 +1757,9 @@ changelog_db_open(
                 ber_dupbv( &id->backend->be_rootndn, id->backend->be_nsuffix );
         }
 
+        Debug( LDAP_DEBUG_ANY,
+                        "changelog: inserting changelog_db_createroot in runqueue\n",
+                        0, 0, 0 );
         ldap_pvt_thread_mutex_lock( &slapd_rq.rq_mutex );
         ldap_pvt_runqueue_insert( &slapd_rq, 3600, changelog_db_createroot, on,
                 "changelog_db_createroot", id->backend->be_suffix[0].bv_val );
@@ -1760,9 +1782,11 @@ changelog_db_destroy(
         struct re_s *re = id->task;
         id->task = NULL;
                                                                 
+        ldap_pvt_thread_mutex_lock( &slapd_rq.rq_mutex );
         if ( ldap_pvt_runqueue_isrunning( &slapd_rq, re ))
                 ldap_pvt_runqueue_stoptask( &slapd_rq, re );
         ldap_pvt_runqueue_remove( &slapd_rq, re );
+        ldap_pvt_thread_mutex_unlock( &slapd_rq.rq_mutex );
 
         if ( id->filters ) {
             freefs = NULL;
